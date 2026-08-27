@@ -1,0 +1,1 @@
+{"version":3,"file":"skillGap.d.ts","sourceRoot":"","sources":["../../../src/generated/types/skillGap.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAEvD,MAAM,WAAW,QAAQ;IACvB,KAAK,EAAE,MAAM,CAAC;IACd,QAAQ,EAAE,MAAM,CAAC;IACjB,GAAG,EAAE,MAAM,CAAC;IACZ,MAAM,EAAE,MAAM,CAAC;IACf,MAAM,EAAE,cAAc,CAAC;CACxB"}

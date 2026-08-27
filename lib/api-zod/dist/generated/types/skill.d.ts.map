@@ -1,0 +1,1 @@
+{"version":3,"file":"skill.d.ts","sourceRoot":"","sources":["../../../src/generated/types/skill.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,MAAM,WAAW,KAAK;IACpB,EAAE,EAAE,MAAM,CAAC;IACX,IAAI,EAAE,MAAM,CAAC;IACb,QAAQ,EAAE,MAAM,CAAC;IACjB,WAAW,EAAE,MAAM,CAAC;IACpB,WAAW,EAAE,MAAM,CAAC;IACpB,UAAU,EAAE,MAAM,CAAC;IACnB,iBAAiB,EAAE,MAAM,CAAC;CAC3B"}
