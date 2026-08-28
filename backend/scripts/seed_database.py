@@ -533,6 +533,9 @@ async def seed(db):
         "experience": "1 year",
         "target_career": "Cloud Engineer",
         "profile_completion": 88,
+        # Pre-computed employability score for the SIH demo
+        "cached_employability_score": 82,
+        "cached_score_class": "HIGH",
         "created_at": demo_now,
         "updated_at": demo_now,
     })
@@ -563,6 +566,24 @@ async def seed(db):
                 "updated_at": demo_now,
             })
 
+    # Assessment results for demo trainee (Python + SQL — used by employability calculator)
+    for skill_name, pct in [("Python", 92), ("SQL", 84)]:
+        skill_id = skill_id_map.get(skill_name, "")
+        asmt_id = assessment_id_map.get(skill_name)
+        if asmt_id:
+            await db.assessment_results.insert_one({
+                "user_id": demo_uid,
+                "assessment_id": asmt_id,
+                "skill_id": skill_id,
+                "skill_name": skill_name,
+                "score": pct,
+                "total": 100,
+                "percentage": pct,
+                "proficiency_level": "Expert" if pct >= 86 else "Advanced",
+                "passed": True,
+                "completed_at": demo_now,
+            })
+
     # Enroll demo trainee in Cloud & DevOps program
     cloud_prog_id = program_ids[0] if program_ids else None
     if cloud_prog_id:
@@ -575,6 +596,20 @@ async def seed(db):
             "enrolled_at": enroll_dt,
             "completed_at": None,
         })
+        # Also add a COMPLETED enrollment so training score is non-zero
+        full_stack_prog = next(
+            (p for i, p in enumerate(program_ids) if i < len(PROGRAM_DATA) and PROGRAM_DATA[i][0].startswith("Full Stack")),
+            program_ids[3] if len(program_ids) > 3 else None
+        )
+        if full_stack_prog:
+            await db.enrollments.insert_one({
+                "trainee_id": demo_uid,
+                "program_id": full_stack_prog,
+                "program_name": "Full Stack Web Development",
+                "status": "COMPLETED",
+                "enrolled_at": demo_now - timedelta(days=120),
+                "completed_at": demo_now - timedelta(days=30),
+            })
         await db.certifications.insert_one({
             "user_id": demo_uid,
             "name": "Web Development Fundamentals",

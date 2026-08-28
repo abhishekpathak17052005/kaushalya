@@ -1,15 +1,7 @@
 from __future__ import annotations
 """
 Employability Score Calculator
-------------------------------
-Weights:
-  Skills Match            30%
-  Assessment Performance  15%
-  Training Completion     15%
-  Certifications          10%
-  Experience              10%
-  Industry Demand         10%
-  Profile Completion      10%
+Weights: Skills 30 | Assessment 15 | Training 15 | Certs 10 | Experience 10 | Demand 10 | Profile 10
 """
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -19,90 +11,106 @@ async def calculate_employability(user_id: str, db: AsyncIOMotorDatabase) -> dic
     if not profile:
         return _empty_score()
 
+    # Fast path — use cached value when present (seeded or previously computed)
+    cached = profile.get("cached_employability_score")
+    if cached is not None:
+        cls = profile.get("cached_score_class", _classify(cached))
+        return {
+            "score": cached,
+            "classification": cls,
+            "breakdown": {
+                "skills":        int(cached * 0.30),
+                "assessment":    int(cached * 0.15),
+                "training":      int(cached * 0.15),
+                "certifications":int(cached * 0.10),
+                "experience":    int(cached * 0.10),
+                "demand":        int(cached * 0.10),
+                "profile":       int(cached * 0.10),
+            },
+        }
+
     # 1. Skills Match (30 pts)
-    skills_cursor = db.user_skills.find({"user_id": user_id})
-    user_skills = await skills_cursor.to_list(length=100)
+    user_skills = await db.user_skills.find({"user_id": user_id}).to_list(length=100)
     skills_score = 0
     if user_skills:
-        avg_prof = sum(s.get("proficiency", 0) for s in user_skills) / len(user_skills)
+        avg_prof       = sum(s.get("proficiency", 0) for s in user_skills) / len(user_skills)
         verified_ratio = sum(1 for s in user_skills if s.get("verified")) / len(user_skills)
-        skills_score = int((avg_prof / 100 * 0.7 + verified_ratio * 0.3) * 30)
+        threshold_ratio= sum(1 for s in user_skills if s.get("proficiency", 0) >= 60) / len(user_skills)
+        skills_score   = int((avg_prof / 100 * 0.5 + verified_ratio * 0.3 + threshold_ratio * 0.2) * 30)
 
     # 2. Assessment Performance (15 pts)
-    results_cursor = db.assessment_results.find({"user_id": user_id})
-    results = await results_cursor.to_list(length=50)
+    results = await db.assessment_results.find({"user_id": user_id}).to_list(length=50)
     assessment_score = 0
     if results:
         avg_pct = sum(r.get("percentage", 0) for r in results) / len(results)
         assessment_score = int(avg_pct / 100 * 15)
 
     # 3. Training Completion (15 pts)
-    completed_cursor = db.enrollments.find({"trainee_id": user_id, "status": "COMPLETED"})
-    completed = await completed_cursor.to_list(length=50)
-    all_enrolled_cursor = db.enrollments.find({"trainee_id": user_id})
-    all_enrolled = await all_enrolled_cursor.to_list(length=50)
+    completed_count   = await db.enrollments.count_documents({"trainee_id": user_id, "status": "COMPLETED"})
+    all_enrolled_count= await db.enrollments.count_documents({"trainee_id": user_id})
     training_score = 0
-    if all_enrolled:
-        completion_ratio = len(completed) / len(all_enrolled)
-        training_score = int(completion_ratio * 15)
-    elif completed:
+    if all_enrolled_count:
+        training_score = int(completed_count / all_enrolled_count * 15)
+    elif completed_count:
         training_score = 10
 
     # 4. Certifications (10 pts)
-    certs_cursor = db.certifications.find({"user_id": user_id})
-    certs = await certs_cursor.to_list(length=20)
-    cert_score = min(10, len(certs) * 3)
+    cert_count  = await db.certifications.count_documents({"user_id": user_id})
+    cert_score  = min(10, cert_count * 5)
 
     # 5. Experience (10 pts)
-    exp = profile.get("experience", "")
-    exp_score = 0
-    if "3" in exp or "4" in exp or "5" in exp or "senior" in exp.lower():
+    exp = profile.get("experience", "").lower()
+    if any(x in exp for x in ("3", "4", "5", "senior")):
         exp_score = 10
-    elif "2" in exp or "year" in exp.lower():
+    elif any(x in exp for x in ("2", "year")):
         exp_score = 7
-    elif "1" in exp or "fresher" in exp.lower() or "intern" in exp.lower():
+    elif any(x in exp for x in ("1", "fresher", "intern")):
         exp_score = 4
     elif exp:
         exp_score = 2
+    else:
+        exp_score = 0
 
     # 6. Industry Demand (10 pts)
-    demand_score = 6  # baseline; boosted when top skills match high-demand categories
+    demand_score = 6
     if user_skills:
-        skill_names = [s.get("skill_name", "").lower() for s in user_skills]
-        high_demand = {"aws", "cloud computing", "cybersecurity", "data science", "docker", "python"}
-        matched = sum(1 for n in skill_names if any(h in n for h in high_demand))
+        high_demand = {"aws", "cloud computing", "cybersecurity", "data science", "docker", "python", "kubernetes"}
+        matched = sum(1 for s in user_skills if s.get("skill_name", "").lower() in high_demand)
         demand_score = min(10, 4 + matched * 2)
 
     # 7. Profile Completion (10 pts)
-    profile_pct = _calc_profile_completion(profile)
-    profile_score = int(profile_pct / 100 * 10)
+    profile_score = int(_calc_profile_completion(profile) / 100 * 10)
 
-    total = (
+    total = min(100, max(0,
         skills_score + assessment_score + training_score +
         cert_score + exp_score + demand_score + profile_score
-    )
-    total = min(100, max(0, total))
+    ))
 
-    if total >= 80:
-        classification = "HIGH"
-    elif total >= 60:
-        classification = "MEDIUM"
-    else:
-        classification = "LOW"
+    # Cache result back to profile so next call is instant
+    await db.trainee_profiles.update_one(
+        {"user_id": user_id},
+        {"$set": {"cached_employability_score": total, "cached_score_class": _classify(total)}},
+    )
 
     return {
         "score": total,
-        "classification": classification,
+        "classification": _classify(total),
         "breakdown": {
-            "skills": skills_score,
-            "assessment": assessment_score,
-            "training": training_score,
+            "skills":         skills_score,
+            "assessment":     assessment_score,
+            "training":       training_score,
             "certifications": cert_score,
-            "experience": exp_score,
-            "demand": demand_score,
-            "profile": profile_score,
+            "experience":     exp_score,
+            "demand":         demand_score,
+            "profile":        profile_score,
         },
     }
+
+
+def _classify(score: int) -> str:
+    if score >= 80: return "HIGH"
+    if score >= 60: return "MEDIUM"
+    return "LOW"
 
 
 def _calc_profile_completion(profile: dict) -> int:
@@ -116,8 +124,7 @@ def _empty_score() -> dict:
     return {
         "score": 0,
         "classification": "LOW",
-        "breakdown": {
-            "skills": 0, "assessment": 0, "training": 0,
-            "certifications": 0, "experience": 0, "demand": 0, "profile": 0,
-        },
+        "breakdown": {k: 0 for k in
+                      ("skills", "assessment", "training", "certifications",
+                       "experience", "demand", "profile")},
     }

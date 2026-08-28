@@ -26,10 +26,14 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s API server (%s)", settings.APP_NAME, settings.ENVIRONMENT)
-    await connect_db()
-    db = get_db()
-    await create_indexes(db)
-    logger.info("%s is ready", settings.APP_NAME)
+    try:
+        await connect_db()
+        db = get_db()
+        await create_indexes(db)
+        logger.info("%s is ready", settings.APP_NAME)
+    except Exception as exc:
+        logger.error("Startup warning — MongoDB not available: %s", exc)
+        logger.warning("Server will start but database-dependent endpoints will fail until MongoDB is available")
     yield
     logger.info("Shutting down %s", settings.APP_NAME)
     await close_db()

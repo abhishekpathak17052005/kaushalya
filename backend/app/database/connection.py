@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config.settings import get_settings
@@ -18,12 +19,9 @@ async def connect_db() -> None:
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
         )
-        # Force connection validation
         await _client.admin.command("ping")
         _db = _client[settings.MONGODB_DB_NAME]
-        logger.info(
-            "MongoDB connected — database: %s", settings.MONGODB_DB_NAME
-        )
+        logger.info("MongoDB connected — database: %s", settings.MONGODB_DB_NAME)
     except Exception as exc:
         logger.error("MongoDB connection failed: %s", exc)
         raise
@@ -39,8 +37,18 @@ async def close_db() -> None:
 
 
 def get_db() -> AsyncIOMotorDatabase:
-    if _db is None:
-        raise RuntimeError("Database not initialized. Call connect_db() first.")
+    """Return DB instance; auto-reconnect if the global is missing."""
+    global _client, _db
+    if _db is not None:
+        return _db
+    # Lazy init — useful when connect_db() failed at startup
+    settings = get_settings()
+    _client = AsyncIOMotorClient(
+        settings.MONGODB_URI,
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+    )
+    _db = _client[settings.MONGODB_DB_NAME]
     return _db
 
 
