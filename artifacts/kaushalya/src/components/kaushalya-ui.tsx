@@ -1,7 +1,9 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { ArrowRight, BarChart3, BriefcaseBusiness, Building2, Check, ChevronDown, CircleAlert, Compass, FileText, LayoutDashboard, Menu, Network, Search, ShieldCheck, Sparkles, Target, UsersRound, X } from 'lucide-react';
+import { ArrowRight, BarChart3, BriefcaseBusiness, Building2, Check, ChevronDown, CircleAlert, Compass, FileText, LayoutDashboard, LogOut, Menu, Network, Search, ShieldCheck, Sparkles, Target, UsersRound, X } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLocation as useWouterLocation } from 'wouter';
 
 export const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ');
 
@@ -35,18 +37,56 @@ const traineeLinks = [
 export function AppShell({ role, children }: { role: 'admin' | 'trainee' | 'employer' | 'institute'; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
+  const [, setLocation] = useWouterLocation();
+  const { user, logout } = useAuth();
   const links = role === 'admin' ? adminLinks : role === 'trainee' ? traineeLinks : [];
   const roleLabel = role === 'admin' ? 'Government workspace' : role === 'trainee' ? 'Trainee workspace' : role === 'employer' ? 'Employer workspace' : 'Institute workspace';
+  const displayName = user?.name || roleLabel;
+  const initials = displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+
+  function handleLogout() {
+    logout();
+    setLocation('/login');
+  }
+
   return <div className="min-h-[100dvh] bg-background">
     <aside className={cx("fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 md:translate-x-0", open ? "translate-x-0" : "-translate-x-full")} data-testid="sidebar-navigation">
       <div className="flex h-[82px] items-center border-b border-sidebar-border px-6"><Mark /></div>
-      <div className="border-b border-sidebar-border px-6 py-5"><div className="text-[10px] font-semibold uppercase tracking-[.18em] text-sidebar-foreground/45">Signed in as</div><div className="mt-1 flex items-center justify-between"><span className="text-sm font-medium">{roleLabel}</span><ChevronDown className="size-4 text-sidebar-foreground/45" /></div></div>
+      <div className="border-b border-sidebar-border px-6 py-5">
+        <div className="text-[10px] font-semibold uppercase tracking-[.18em] text-sidebar-foreground/45">Signed in as</div>
+        <div className="mt-1 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium">{displayName}</div>
+            {user?.email && <div className="text-[10px] text-sidebar-foreground/45 truncate max-w-[160px]">{user.email}</div>}
+          </div>
+          <ChevronDown className="size-4 text-sidebar-foreground/45 shrink-0" />
+        </div>
+      </div>
       {links.length > 0 && <nav className="flex-1 space-y-1 px-3 py-5">{links.map((item) => { const Icon = item.icon; const active = location === item.href; return <Link key={item.href} href={item.href} onClick={() => setOpen(false)} data-testid={`link-${item.label.toLowerCase().replaceAll(' ', '-')}`} className={cx("group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] transition-colors", active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground")}><Icon className={cx("size-[17px]", active ? "text-accent" : "text-sidebar-foreground/45 group-hover:text-accent")} /><span>{item.label}</span>{active && <span className="ml-auto size-1.5 rounded-full bg-accent" />}</Link>; })}</nav>}
-      <div className="border-t border-sidebar-border p-4"><div className="rounded-xl bg-sidebar-accent/60 p-3"><div className="flex items-center gap-2 text-xs font-semibold"><span className="size-2 rounded-full bg-[#78c69b]" />Data systems online</div><p className="mt-1.5 text-[11px] leading-4 text-sidebar-foreground/55">Last sync 18 minutes ago across 18 districts.</p></div><Link href="/" data-testid="link-back-to-home" className="mt-3 block px-2 text-xs text-sidebar-foreground/45 hover:text-sidebar-foreground">Return to public site</Link></div>
+      <div className="border-t border-sidebar-border p-4">
+        <div className="rounded-xl bg-sidebar-accent/60 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold"><span className="size-2 rounded-full bg-[#78c69b]" />Data systems online</div>
+          <p className="mt-1.5 text-[11px] leading-4 text-sidebar-foreground/55">Last sync 18 minutes ago across 18 districts.</p>
+        </div>
+        <Link href="/" data-testid="link-back-to-home" className="mt-3 block px-2 text-xs text-sidebar-foreground/45 hover:text-sidebar-foreground">Return to public site</Link>
+        <button onClick={handleLogout} data-testid="button-logout" className="mt-2 flex w-full items-center gap-2 px-2 py-1.5 text-xs text-sidebar-foreground/45 hover:text-sidebar-foreground rounded-lg hover:bg-sidebar-accent/60 transition-colors">
+          <LogOut className="size-3.5" />Sign out
+        </button>
+      </div>
     </aside>
     {open && <button aria-label="Close navigation" data-testid="button-close-navigation" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-foreground/25 md:hidden"><X className="absolute right-5 top-5 text-background" /></button>}
     <div className="md:pl-[264px]">
-      <header className="sticky top-0 z-20 flex h-[70px] items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur md:px-8"><div className="flex items-center gap-3"><button onClick={() => setOpen(true)} data-testid="button-open-navigation" className="rounded-lg p-2 hover:bg-muted md:hidden"><Menu className="size-5" /></button><div className="md:hidden"><Mark compact /></div><span className="hidden text-xs text-muted-foreground md:block">{roleLabel} / <span className="text-foreground">{location.split('/').slice(-1)[0]?.replaceAll('-', ' ')}</span></span></div><div className="flex items-center gap-3"><button data-testid="button-global-search" className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground hover:bg-muted sm:flex"><Search className="size-3.5" />Search workspace <span className="ml-3 rounded border border-border px-1.5 py-0.5 text-[10px]">⌘ K</span></button><div className="grid size-8 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground" data-testid="avatar-user">AS</div></div></header>
+      <header className="sticky top-0 z-20 flex h-[70px] items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur md:px-8">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setOpen(true)} data-testid="button-open-navigation" className="rounded-lg p-2 hover:bg-muted md:hidden"><Menu className="size-5" /></button>
+          <div className="md:hidden"><Mark compact /></div>
+          <span className="hidden text-xs text-muted-foreground md:block">{roleLabel} / <span className="text-foreground">{location.split('/').slice(-1)[0]?.replaceAll('-', ' ')}</span></span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button data-testid="button-global-search" className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground hover:bg-muted sm:flex"><Search className="size-3.5" />Search workspace <span className="ml-3 rounded border border-border px-1.5 py-0.5 text-[10px]">⌘ K</span></button>
+          <div className="grid size-8 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground" data-testid="avatar-user" title={displayName}>{initials}</div>
+        </div>
+      </header>
       <main>{children}</main>
     </div>
   </div>;
